@@ -92,10 +92,11 @@ object Typed {
     case BooleanT => "Boolean"
     case UnitT => "Unit"
     case AppT(t, Nil) => t
-    case AppT(t, as) => s"$t[${as.mkString(", ")}]"
+    case AppT(t, as) => s"$t[${as.map(showType).mkString(", ")}]"
     case VarT(a) => s"\'$a"
-    case ArrowT(p :: Nil, rt) => s"($p => $rt)"
-    case ArrowT(ps, rt) => s"((${ps.mkString(", ")}) => $rt)"
+    case ArrowT(p :: Nil, rt) => s"(${showType(p)} => ${showType(rt)})"
+    case ArrowT(ps, rt) =>
+      s"((${ps.map(showType).mkString(", ")}) => ${showType(rt)})"
   }
 
   // type erasure
