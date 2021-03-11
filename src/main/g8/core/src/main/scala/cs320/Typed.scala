@@ -11,7 +11,7 @@ object Typed {
   // type application
   case class Id(name: String, targs: List[Type]) extends Expr
   // integer
-  case class IntE(value: Int) extends Expr
+  case class IntE(value: BigInt) extends Expr
   // boolean
   case class BooleanE(value: Boolean) extends Expr
   // unit
@@ -148,7 +148,7 @@ object Typed {
     )
     private lazy val tKeywords = Set("Int", "Boolean", "Unit")
 
-    private lazy val n: Parser[Int] = "-?[0-9]+".r ^^ (_.toInt)
+    private lazy val n: Parser[BigInt] = "-?[0-9]+".r ^^ BigInt.apply
     private lazy val b: Parser[Boolean] = "true" ^^^ true | "false" ^^^ false
     private lazy val x: Parser[String] =
       "[a-zA-Z_][a-zA-Z0-9_]*".r.withFilter(!keywords(_))

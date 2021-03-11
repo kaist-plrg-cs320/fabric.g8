@@ -9,7 +9,7 @@ object Untyped {
   // identifier
   case class Id(name: String) extends Expr
   // integer
-  case class IntE(value: Int) extends Expr
+  case class IntE(value: BigInt) extends Expr
   // boolean
   case class BooleanE(value: Boolean) extends Expr
   // unit
@@ -73,7 +73,7 @@ object Untyped {
   // unit value
   case object UnitV extends Value
   // integer value
-  case class IntV(value: Int) extends Value
+  case class IntV(value: BigInt) extends Value
   // boolean value
   case class BooleanV(value: Boolean) extends Value
   // closure
