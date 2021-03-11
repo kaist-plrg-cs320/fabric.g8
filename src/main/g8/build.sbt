@@ -1,5 +1,5 @@
-scalaVersion := "2.13.5"
-organization := "cs320"
+ThisBuild / scalaVersion := "2.13.5"
+ThisBuild / organization := "cs320"
 name := "fabric"
 
 scalacOptions += "-feature"
