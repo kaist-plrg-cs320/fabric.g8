@@ -6,7 +6,7 @@ class Spec extends SpecBase {
 
   val run = Implementation.run _
   val runWithStdLib = Implementation.runWithStdLib _
-
+  val typeCheck = Implementation.typeCheck _
   def typeOf(s: String): String =
     try {
       Typed.showType(typeCheck(Typed.Expr(s)))
@@ -14,10 +14,8 @@ class Spec extends SpecBase {
       case _: PLError => "!Error!"
       case _: Exception => "!Crash!"
     }
-
   def typeOf(s1: String, s2: String): (String, String) =
     (typeOf(s1), typeOf(s2))
-
   def typeOf(s1: String, s2: String, s3: String): (String, String, String) =
     (typeOf(s1), typeOf(s2), typeOf(s3))
 
