@@ -7,6 +7,20 @@ class Spec extends SpecBase {
   val run = Implementation.run _
   val runWithStdLib = Implementation.runWithStdLib _
 
+  def typeOf(s: String): String =
+    try {
+      Typed.showType(typeCheck(Typed.Expr(s)))
+    } catch {
+      case _: PLError => "!Error!"
+      case _: Exception => "!Crash!"
+    }
+
+  def typeOf(s1: String, s2: String): (String, String) =
+    (typeOf(s1), typeOf(s2))
+
+  def typeOf(s1: String, s2: String, s3: String): (String, String, String) =
+    (typeOf(s1), typeOf(s2), typeOf(s3))
+
   test(run("42"), "42")
   test(run("true"), "true")
   test(run("()"), "()")
@@ -464,6 +478,189 @@ class Spec extends SpecBase {
       }
     }
   """), "5")
+
+	// Fall 2020
+
+  test(run("5 % -3"), "2")
+  test(run("if(42/6 > 42%7) 1*0 else 1/0"), "0")
+  test(run("""
+    var x:Int = 0;
+    val y = (x = 1);
+    y
+  """), "()")
+  test(run("""
+    def f(x:Int):Int = if (x == 0) 0 else (if (x % 3 == 2) h(x - 1) else x + g(x - 1));
+    def g(x:Int):Int = if (x == 0) 0 else (if (x % 3 != 1) f(x - 1) else x + h(x - 1));
+    def h(x:Int):Int = if (x == 0) 0 else (if (x % 3 == 0) g(x - 1) else x + f(x - 1));
+    f(9)
+  """), "24")
+  test(run("""
+    var sum = 0;
+    def append(d:Int):Unit = sum = sum * 10 + d;
+    {append(1);(x:Int, y:Int) => if({append(6); x} == {append(7); y}) sum else 0}(
+      {append(2); 1} + {append(3); 2},
+      {append(4); 15} % {append(5); 4}
+    )
+  """), "1234567")
+  test(run("""
+    type Adder {
+      case add0
+      case add1(Int)
+      case add2(Int, Int)
+    }
+    add2(4, 2) match {
+      case add2(x, y) => x + y
+      case add0 => 0
+      case add1(x) => x
+    }
+  """), "6")
+  test(run("lazy val x:Int = 3 / 0; 42"), "42")
+  test(run("var x:Int = 0; lazy val y:Int = {x = x + 1; x}; y + y"), "2")
+  test(run("var x:Boolean = false; lazy val y:Boolean = x; {x = !x; y}"), "true")
+  test(run("""
+    type fruit {case apple case orange}
+    val x = orange match {case apple => 1 case orange => 2};
+    type color {case red case orange}
+    val y = orange match {case red => 4 case orange => 8};
+    x + y
+  """), "10")
+  test(run("""
+    type fruit {case apple case orange}
+    val x = orange;
+    type color {case red case orange}
+    x match {
+      case apple => 0
+      case orange => 1
+    }
+  """), "1")
+  test(run("""
+    val y:Int = 0;
+    lazy val x:Int = y;
+    val y:Int = 1;
+    x
+  """), "0")
+  test(run("""
+    type t {case c(Int)}
+    val x:Int = 0;
+    c(1) match {case c(x) => x}
+  """), "1")
+  test(run("""
+    var x = 0;
+    def f(t:Int):Int = x;
+    val y = f(0);
+    {x = 1;
+    val x = 2;
+    var x = 3;
+    {x = 4;
+    y + f(0)}}
+  """), "1")
+  testExc(run("(3 + 4) % (3 - 3)"), "")
+
+  test(run("""
+    type x['x] {case x('x)}
+    val x = x[Int](0) match {case x(x) => x};
+    x
+  """), "0")
+  test(run("""
+    type x['x] {case x('x)}
+    def f['x](x:x['x]):'x = x match {case x(x)=>x};
+    f[Int](x[Int](0))
+  """), "0")
+  test(run("""
+    def app['a, 'b](f:'a=>'b, x:'a):'b = f(x);
+    def app2['a, 'b](f:'b=>'a, x:'b):'a = app['b,'a](f,x);
+    app2[Boolean, Int]((x:Int)=>x%2==0, 42)
+  """), "true")
+
+  test(typeOf("1 + 1", "true + 1"), ("Int", "!Error!"))
+  test(typeOf("def f(): Int = 1 + f(); f() + 1"), "Int")
+  test(typeOf("1 - 1", "1 - false"), ("Int", "!Error!"))
+  test(typeOf("def f(): Int = 1 + f(); f() - 1"), "Int")
+  test(typeOf("1 * 1", "365 * ()"), ("Int", "!Error!"))
+  test(typeOf("def f(): Int = 1 + f(); f() * 1"), "Int")
+  test(typeOf("1 / 1", "1 / true"), ("Int", "!Error!"))
+  test(typeOf("def f(): Int = 1 + f(); f() / 1"), "Int")
+  test(typeOf("1 % 1", "false % true"), ("Int", "!Error!"))
+  test(typeOf("def f(): Int = 1 + f(); f() % 1"), "Int")
+  test(typeOf("1 == 1", "false == 1"), ("Boolean", "!Error!"))
+  test(typeOf("1 < 1", "() < ()"), ("Boolean", "!Error!"))
+  test(typeOf("def f(): Int = 1 + f(); { f(); 1 }"), "Int")
+  test(typeOf("if (false) false else true"), "Boolean")
+  test(typeOf("val x = 1; val x = true; x"), "Boolean")
+  test(typeOf("(x: Int) => x"), "(IntT => IntT)")
+  test(typeOf("(x: Int) => x", "(x: 'T) => x"), ("(IntT => IntT)", "!Error!"))
+  test(typeOf("(x: Int) => x", "(x: Int) => y"), ("(IntT => IntT)", "!Error!"))
+  test(typeOf("((x: Int) => x)(1)"), "Int")
+  test(typeOf("var x: Int = 1; { x = 10; 1 }"), "Int")
+  test(typeOf("var x: Int = 1; { x = 10; 1 }", "var x: Int = 10; { x = true; x }"), ("Int", "!Error!"))
+
+  test(typeOf("""
+  val x = 1;
+  type A {
+    case Y(Boolean)
+  }
+  Y(true) match {
+    case Y(x) => x
+  }
+  """), "Boolean")
+  test(typeOf("1", "a + 1"), ("Int", "!Error!"))
+  test(typeOf("type A['T] { case X } 1", """
+  type A {
+    case X
+  }
+  X
+  """), ("Int", "!Error!"))
+  test(typeOf("type A['T] { case X } 1", """
+  type A['T] {
+    case X
+  }
+  type B['S] {
+    case Y('T)
+  }
+  1
+  """), ("Int", "!Error!"))
+  test(typeOf("def id['T](x: 'T): 'T = x; id[Boolean](true)", """
+  def id['T](x: 'T): 'T = x;
+  id[Boolean](1)
+  """), ("Boolean", "!Error!"))
+  test(typeOf("def id['T](y: 'T): 'T = y; id[Boolean](true)", """
+  def id['T](x: 'T): 'T = x;
+  def id2['S](y: 'S): 'S = id['S](y);
+  id2[Int](1)
+  """), ("Boolean", "Int"))
+  test(typeOf("def id['T](z: 'T): 'T = z; id[Boolean](true)", """
+  def f['T, 'S](t: 'T): 'T = t;
+  def g['S](): Int = f['S, Int](1);
+  g[Boolean]()
+  """), ("Boolean", "!Error!"))
+  test(typeOf(
+  "type A['T] { case X } 1",
+  "def id['T](x: 'T): 'T = x; id[Boolean](true)", """
+  type A {
+    case X(B['S])
+  }
+  type B['S] {
+    case Y('S)
+  }
+  def x['S](i: 'S): A = X(Y['S](i));
+  def y['S](): 'S = x[Boolean](false) match {
+    case X(b) => b
+  } match {
+    case Y(k) => k
+  };
+  y[Int]()
+  """), ("Int", "Boolean", "!Error!"))
+  test(typeOf(
+  "type A['T] { case X } 1",
+  "def id['T](y: 'T): 'T = y; id[Boolean](true)", """
+  type A['T] {
+    case X('T)
+  }
+  def id['T](x: 'T): 'T = x;
+  X[Int](1) match {
+      case X(i) => id['T](i)
+  }
+  """), ("Int", "Boolean", "!Error!"))
 
   /* Write your own tests */
 }
