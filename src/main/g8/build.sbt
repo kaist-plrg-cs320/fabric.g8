@@ -18,3 +18,6 @@ lazy val core = (project in file("core")).settings(
   libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.2",
   libraryDependencies += "org.jline" % "jline" % "3.1.3"     
 ) dependsOn macros
+
+javaOptions ++= Seq("-Xss1G", "-Xms4G")
+fork := true
