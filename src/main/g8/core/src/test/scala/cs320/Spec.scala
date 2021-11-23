@@ -660,5 +660,240 @@ class Spec extends SpecBase {
   }
   """), ("Int", "Boolean", "!Error!"))
 
+  // Spring 2021
+
+  test(run("var x: Int = 0; val y = (x = 1); y"), "()")
+  test(run("(1 % -1)"), "0")
+  test(run("{ def z(): Int = 1; { val z = 1; ((t: Boolean, q: Boolean) => z) }(true, false) }"), "1")
+  test(run("{ val z = 1; { def z(): Int = 2; z } }"), "<function>")
+  testExc(run("1 / 0"), "")
+  testExc(run("1 % 0"), "")
+  testExc(run("1 / (1 / 2)"), "")
+  testExc(run("1 % (1 / 2)"), "")
+
+  test(typeOf(
+    "val x = 1; x",
+    "x",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def id(x: Int): Int = x; id(1)",
+    "def id(x: Int): Int = x; id[Int](1)",
+    "def id(x: Int): Int = x; id[Int, Boolean](1)",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "def id['T](x: 'T): 'T = x; id[Int](1)",
+    "def id['T](x: 'T): 'T = x; id(1)",
+    "def id['T](x: 'T): 'T = x; id[Int, Boolean](1)",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A['T] { case A('T) } { A[Int](1); 0 }",
+    "type A['T] { case A('T) } { A(1); 0 }",
+    "type A['T] { case A('T) } { A[Int, Boolean](1); 0 }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A } { type B { case A } 0 }",
+    "type A { case A } { type A { case A } 0 }",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def id['T](x: 'T): 'T = { def id['S](x: 'S): 'S = x; x }; 0",
+    "def id['T](x: 'T): 'T = { def id['T](x: 'T): 'T = x; x }; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def id['T](x: 'T): 'T = { type A['S] { case A } x }; 0",
+    "def id['T](x: 'T): 'T = { type A['T] { case A } x }; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "var x = 1; { x = 2; x }",
+    "val x = 1; { x = 2; x }",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def id(x: Int): Int = x; id(1)",
+    "def id(x: Int): Int = x; id()",
+    "def id(x: Int): Int = x; id(1, 2)",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A(Int) } { A(1); 0 }",
+    "type A { case A(Int) } { A(); 0 }",
+    "type A { case A(Int) } { A(1, 2); 0 }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "((x: Int) => x)(1)",
+    "1(1)",
+    "true(1)",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x case B(x) => x }",
+    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x }",
+    "type A { case A(Int) case B(Int) } A(1) match { case B(x) => x }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x case B(x) => x }",
+    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x case C(x) => x }",
+    "type A { case A(Int) case B(Int) } A(1) match { case B(x) => x case C(x) => x }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => 0 }",
+    "type A { case A(Int) case B } A(1) match { case A => 0 case B => 0 }",
+    "type A { case A(Int) case B } A(1) match { case A(x) => x case B(x) => x }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => 0 }",
+    "type A { case A(Int) case B } 1 match { case A(x) => x case B => 0 }",
+    "type A { case A(Int) case B } true match { case A(x) => x case B => 0 }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "if (true) 1 else 2",
+    "if (1) 1 else 2",
+    "if (()) 1 else 2",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "if (true) 1 else 2",
+    "if (true) 1 else true",
+    "if (true) () else 2",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "val x: Int = 1; x",
+    "val x: Int = true; x",
+    "val x: Boolean = 1; x",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "lazy val x: Int = 1; x",
+    "lazy val x: Int = true; x",
+    "lazy val x: Boolean = 1; x",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "def id(x: Int): Int = x; 0",
+    "def id(x: Int): Int = true; 0",
+    "def id(x: Int): Boolean = x; 0",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "var x = 1; { x = 2; x }",
+    "var x = true; { x = 1; x }",
+    "var x = 1; { x = true; x }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "((x: Int) => x)(0)",
+    "((x: Int) => x)(true)",
+    "((x: Boolean) => x)(0)",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => 0 }",
+    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => true }",
+    "type A { case A(Int) case B } A(1) match { case A(x) => true case B => 0 }",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "2 + 2",
+    "true + 2",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "2 * 2",
+    "365 * ()",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "2 / 2",
+    "2 / true",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "2 % 2",
+    "false % true"
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "2 == 2",
+    "false == 2",
+  ), ("Boolean", "!Error!"))
+  test(typeOf(
+    "2 < 2",
+    "() < ()",
+  ), ("Boolean", "!Error!"))
+  test(typeOf(
+    "type A { case A } val x = (y: A) => y; 0",
+    "type A { case A } val x = (y: B) => y; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } val x = (y: A) => y; 0",
+    "def foo['T](): Int = { val x = (y: T) => y; 0 }; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def foo['T](): Int = { val x = (y: 'T) => y; 0 }; 0",
+    "def foo['T](): Int = { val x = (y: 'S) => y; 0 }; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def foo['T](): Int = { val x = (y: 'T) => y; 0 }; 0",
+    "type A { case A } val x = (y: 'A) => y; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A['T] { case A } val x = (y: A[Int]) => y; 0",
+    "type A['T] { case A } val x = (y: A) => y; 0",
+    "type A['T] { case A } val x = (y: A[Int, Boolean]) => y; 0",
+  ), ("Int", "!Error!", "!Error!"))
+  test(typeOf(
+    "type A { case A } val x = (y: A => Int) => y; 0",
+    "type A { case A } val x = (y: B => Int) => y; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A['T] { case A } val x = (y: A[Int]) => y; 0",
+    "type A['T] { case A } val x = (y: A[B]) => y; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } def id['T](x: 'T): 'T = x; { id[A]; 0 }",
+    "type A { case A } def id['T](x: 'T): 'T = x; { id[B]; 0 }",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } { (x: A) => x; 0 }",
+    "type A { case A } { (x: B) => x; 0 }",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } val x: A = A; 0",
+    "type A { case A } val x: B = A; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } lazy val x: A = A; 0",
+    "type A { case A } lazy val x: B = A; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } def f(x: A): Int = 0; 0",
+    "type A { case A } def f(x: B): Int = 0; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } def f(x: Int): A = A; 0",
+    "type A { case A } def f(x: Int): B = A; 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A(A) } 0",
+    "type A { case A(B) } 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A { case A } 0",
+    "type A { case A } A",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A['T] { case A } type B['S] { case B('S) } 1",
+    "type A['T] { case A } type B['S] { case B('T) } 1",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def id['T](x: 'T): 'T = x; id[Boolean](true)",
+    "def id['T](x: 'T): 'T = x; id[Boolean](1)",
+  ), ("Boolean", "!Error!"))
+  test(typeOf(
+    "def foo['X, 'Y](x: 'X): 'X = x; def bar['Y, 'Z](z: 'Z): 'Z = foo['Z, 'Z](z); 0",
+    "def foo['X, 'Y](x: 'X): 'X = x; def bar['Y, 'Z](z: 'Z): 'Z = foo['Y, 'Z](z); 0",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "type A['T] { case A } { A[Int]; 0 }",
+    "type A['T] { case A } { A['T]; 0 }",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "def f['T](x: 'T): 'T = x; { f[Int]; 0 }",
+    "def f['T](x: 'T): 'T = x; { f['T]; 0 }",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "{ type A { case A } 0; (x: Int) => 0; 0 }",
+    "{ type A { case A } 0; (x: A) => 0; 0 }",
+  ), ("Int", "!Error!"))
+  test(typeOf(
+    "((z: Int, w: Int, x: Int) => w)(0, ((x: Int, v: Int) => x)(3, 3), 0)",
+    "((z: Int, w: Int, x: Int) => w)(0, ((x: Int, v: Int) => z)(3, 3), 0)",
+  ), ("Int", "!Error!"))
+
   /* Write your own tests */
 }
