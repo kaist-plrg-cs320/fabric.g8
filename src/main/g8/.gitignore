@@ -7,3 +7,6 @@ target
 metals.sbt
 .metals
 .bloop
+.bsp
+
+.fabric_history

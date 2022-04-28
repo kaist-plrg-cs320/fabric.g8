@@ -2,6 +2,8 @@ package cs320
 
 import scala.util.parsing.combinator._
 
+case class ParsingError(msg: String) extends Exception
+
 // typed FABRIC
 object Typed {
 
@@ -137,16 +139,18 @@ object Typed {
 
   object Expr extends RegexParsers {
 
+    private def error(msg: String): Nothing = throw ParsingError(msg)
+
     private def wrapR[T](e: => Parser[T]): Parser[T] = "(" ~> e <~ ")"
     private def wrapC[T](e: => Parser[T]): Parser[T] = "{" ~> e <~ "}"
     private def wrapS[T](e: => Parser[T]): Parser[T] = "[" ~> e <~ "]"
     private def wrapA[T](e: => Parser[T]): Parser[T] = "<" ~> e <~ ">"
 
-    private lazy val keywords = Set(
+    lazy val keywords = Set(
       "true", "false", "val", "var", "lazy", "def",
       "if", "else", "type", "case", "match"
     )
-    private lazy val tKeywords = Set("Int", "Boolean", "Unit")
+    lazy val tKeywords = Set("Int", "Boolean", "Unit")
 
     private lazy val n: Parser[BigInt] = "-?[0-9]+".r ^^ BigInt.apply
     private lazy val b: Parser[Boolean] = "true" ^^^ true | "false" ^^^ false
@@ -363,6 +367,6 @@ object Typed {
     private def dupCheck(ss: List[String]): Boolean =
       ss.distinct.length != ss.length
 
-    def apply(str: String): Expr = parseAll(e, str).get
+    def apply(str: String): Expr = parseAll(e, str).getOrElse(error(""))
   }
 }
