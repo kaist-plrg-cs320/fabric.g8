@@ -18,7 +18,7 @@ object Main {
       case Array("--lib") => true
       case _ => false
     }
-    val terminal = TerminalBuilder.builder.build()
+    val terminal = TerminalBuilder.builder.dumb(false).build()
     val reader = LineReaderBuilder.builder
       .terminal(terminal)
       .highlighter(Highlighter)
