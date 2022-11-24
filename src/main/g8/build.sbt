@@ -21,7 +21,10 @@ lazy val core = (project in file("core")).settings(
   wartremoverExcluded ++= {
     lazy val dir = baseDirectory.value / "src" / "main" / "scala"
     lazy val sdir = dir / "cs320"
-    Seq(dir / "package.scala", sdir / "Fuzzer.scala", sdir / "Main.scala", sdir / "Typed.scala")
+    Seq(
+      dir / "package.scala", sdir / "Fuzzer.scala", sdir / "Main.scala", sdir / "Typed.scala",
+      baseDirectory.value / "src" / "test" / "scala" / "cs320" / "Spec.scala"
+    )
   }
 ).dependsOn(macros)
 
