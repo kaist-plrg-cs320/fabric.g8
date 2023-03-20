@@ -4,896 +4,773 @@ import Macros._
 
 class Spec extends SpecBase {
 
-  val run = Implementation.run _
-  val runWithStdLib = Implementation.runWithStdLib _
-  val typeCheck = Implementation.typeCheck _
-  def typeOf(s: String): String =
+  def check(s: String): String =
     try {
-      Typed.showType(typeCheck(Typed.Expr(s)))
+      Typed.showType(Implementation.typeCheck(Typed.Expr(s)))
     } catch {
-      case _: PLError => "!Error!"
-      case _: Exception => "!Crash!"
+      case e: PLError => "Type error"
     }
-  def typeOf(s1: String, s2: String): (String, String) =
-    (typeOf(s1), typeOf(s2))
-  def typeOf(s1: String, s2: String, s3: String): (String, String, String) =
-    (typeOf(s1), typeOf(s2), typeOf(s3))
+  def check(s1: String, s2: String, ss: String*): List[String] =
+    (s1 :: s2 :: ss.toList).map(check)
+  def interp(s: String): String =
+    Untyped.showValue(Implementation.interp(Typed.erase(Typed.Expr(s))))
+  def lib(s: String): String = {
+    val e = Typed.Expr(StdLib.code + s)
+    val t = Typed.showType(Implementation.typeCheck(e))
+    val v = Untyped.showValue(Implementation.interp(Typed.erase(e)))
+    s"Type: $t, Value: $v"
+  }
 
-  test(run("42"), "42")
-  test(run("true"), "true")
-  test(run("()"), "()")
-  test(run("1 + 2"), "3")
-  test(run("2 * 4"), "8")
-  test(run("5 / 2"), "2")
-  test(run("13 % 5"), "3")
-  test(run("1 == 1"), "true")
-  test(run("1 < 1"), "false")
-  test(run("{1; 2}"), "2")
-  test(run("if (true) 1 else 2"), "1")
-  test(run("""
-    val x = 1 + 2;
-    val y: Int = x * 4 + 1;
-    y / (x - 1)
-  """), "6")
-  test(run("""
-    lazy val f: Int => Int = (x: Int) => if (x < 1) 0 else x + f(x - 1);
-    f(10)
-  """), "55")
-  test(run("""
-    def f(x: Int): Int = if (x < 1) 0 else x + f(x - 1);
-    f(10)
-  """), "55")
-  test(run("(x: Int) => x + x"), "<function>")
-  test(run("((x: Int, y: Int) => x + y)(1, 2)"), "3")
-  test(run("""
-    var x = 1;
-    var y: Int = x * 4 + 8;
-    { x = 3; y / (x - 1) }
-  """), "6")
-  test(run("""
-    type Fruit {
-      case Apple
-      case Banana(Int)
-    }
-    (Apple match {
-      case Apple => 1
-      case Banana(x) => 0
-    }) + (Banana(1) match {
-      case Apple => 0
-      case Banana(x) => x
+  test(
+    check(
+      "{ val x = 6; x }",
+      "x",
+      "{ val x = 6; x[Int] }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ def x['x](): Int = 6; x[Int] }",
+      "{ def x['x](): Int = 6; x }",
+      "{ def x['x](): Int = 6; x[Int, Int] }",
+      "{ def x['x](): Int = 6; x['x] }"
+    ),
+    List(
+      "(() => Int)",
+      "Type error",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(check("()"), "Unit")
+  test(
+    check(
+      "(26 + 6)",
+      "(false + 6)",
+      "(26 + true)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "(26 * 6)",
+      "(false * 6)",
+      "(26 * false)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "(26 / 6)",
+      "(true / 6)",
+      "(26 / false)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "(26 % 6)",
+      "(false % 6)",
+      "(26 % false)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "(26 == 6)",
+      "(true == 6)",
+      "(26 == false)"
+    ),
+    List(
+      "Boolean",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "(26 < 6)",
+      "(false < 6)",
+      "(26 < false)"
+    ),
+    List(
+      "Boolean",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ 26; 6 }",
+      "{ x; 6 }"
+    ),
+    List(
+      "Int",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "(if (true) 26 else 6)",
+      "(if (6) 26 else 6)",
+      "(if (false) true else 6)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ val x = 6; x }",
+      "{ val x: 'x = 6; 26 }",
+      "{ val x: Boolean = 6; 26 }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ lazy val x: Int = 6; x }",
+      "{ lazy val x: 'x = 6; 26 }",
+      "{ lazy val x: Int = false; 26 }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(check("{ lazy val x: Int = x; x }"), "Int")
+  test(check("{ lazy val x: Int = f; lazy val f: Int = x; x }"), "Int")
+  test(
+    check(
+      "{ def x(): Int = 6; x }",
+      "{ def x(f: 'x): Int = 6; 26 }",
+      "{ def x(): 'x = 6; 26 }",
+      "{ def x(): Int = false; 26 }"
+    ),
+    List(
+      "(() => Int)",
+      "Type error",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ def x['x](f: 'x): 'x = { def x['f](f: 'f): 'f = f; x['x](f) }; x[Int] }",
+      "{ def x['x](f: 'x): 'x = { def x['x](f: 'x): 'x = f; f }; 6 }"
+    ),
+    List(
+      "(Int => Int)",
+      "Type error"
+    )
+  )
+  test(check("{ def x(): Int = x(); x }"), "(() => Int)")
+  test(check("{ def x(): Int = f(); def f(): Int = x(); x }"), "(() => Int)")
+  test(check("{ def x['x](d: 'x): 'x = f['x](d); def f['x](d: 'x): 'x = x['x](d); x[Int] }"), "(Int => Int)")
+  test(check("{ def x(): Int = f; lazy val f: Int = x(); x }"), "(() => Int)")
+  test(
+    check(
+      "{ type x { case x } { val f: x = x; 6 } }",
+      "{ type x { case x('x) } 6 }",
+      "{ type x { case x } x }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ type x { case x } { type f { case f } 6 } }",
+      "{ type x { case x } { type x { case f } 6 } }"
+    ),
+    List(
+      "Int",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ def x['x](): Int = { type x['f] { case x } 6 }; 6 }",
+      "{ def x['x](): Int = { type x['x] { case x } 6 }; 6 }"
+    ),
+    List(
+      "Int",
+      "Type error"
+    )
+  )
+  test(check("{ type x { case x(Int) case f(Int) } { val f: x = x(26); 6 } }"), "Int")
+  test(check("{ type x['x] { case x('x) } { val f: x[Int] = x[Int](26); 6 } }"), "Int")
+  test(check("{ type x { case x(x) } 6 }"), "Int")
+  test(check("{ type x { case x(f) } type f { case f(x) } 6 }"), "Int")
+  test(check("{ type x['x] { case x(f['x]) } type f['x] { case f(x['x]) } 6 }"), "Int")
+  test(check("{ lazy val f: x = x; def d(): x = x; type x { case x } 6 }"), "Int")
+  test(
+    check(
+      "((x: Int) => x)",
+      "((x: 'x) => 26)"
+    ),
+    List(
+      "(Int => Int)",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ var x = 6; (x = 26) }",
+      "(x = 26)",
+      "{ def x['x](): Int = 6; (x = 26) }",
+      "{ val x = 6; (x = 26) }",
+      "{ var x = 6; (x = true) }"
+    ),
+    List(
+      "Unit",
+      "Type error",
+      "Type error",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "((x: Int) => x)(6)",
+      "26(6)",
+      "((x: Int) => 26)()",
+      "((x: Int) => 26)(6, 6)",
+      "((x: Int) => 26)(true)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "(() => 26)()",
+      "(() => 26)(6)",
+      "(() => 26)(6, 6)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "((x: Int, f: Int) => x)(6, 6)",
+      "((x: Int, f: Int) => 26)()",
+      "((x: Int, f: Int) => 26)(6)"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ type x { case x } (x match { case x => 6 }) }",
+      "{ type x { case x } (26 match { case x => 6 }) }",
+      "{ type x { case x } (x match { case x(f) => 6 }) }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ type x { case x case f } (x match { case f => 6 case x => 6 }) }",
+      "{ type x { case x case f } (x match { case x => 6 }) }",
+      "{ type x { case x case f } (x match { case f => 6 }) }",
+      "{ type x { case x case f } (x match { case x => 6 case f => true }) }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ type x { case x(Int) } (x(6) match { case x(f) => f }) }",
+      "{ type x { case x(Int) } (x(6) match { case x => 26 }) }",
+      "{ type x { case x(Int) } (x(6) match { case x(f, d) => 26 }) }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(check("{ type x['x] { case x('x) } (x[Int](6) match { case x(f) => f }) }"), "Int")
+  test(
+    check(
+      "{ type x['x] { case x('x) } { val x = ((x: x[Int]) => 6); 6 } }",
+      "{ type x['x] { case x('x) } { val x = ((x: x['x]) => 6); 6 } }",
+      "{ type x['x] { case x('x) } { val x = ((x: f[Int]) => 6); 6 } }",
+      "{ type x['x] { case x('x) } { val x = ((x: x) => 6); 6 } }",
+      "{ type x['x] { case x('x) } { val x = ((x: x[Int, Int]) => 6); 6 } }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ def x['x](f: 'x): Int = 6; 6 }",
+      "{ def x['x](f: 'f): Int = 6; 6 }"
+    ),
+    List(
+      "Int",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ def x['x](f: ('x => 'x)): Int = 6; 6 }",
+      "{ def x['x](f: ('f => 'x)): Int = 6; 6 }",
+      "{ def x['x](f: ('x => 'f)): Int = 6; 6 }"
+    ),
+    List(
+      "Int",
+      "Type error",
+      "Type error"
+    )
+  )
+  test(
+    check(
+      "{ def x['x, 'f](f: 'x): 'x = f; def f['f, 'd](d: 'd): 'd = x['d, 'd](d); 6 }",
+      "{ def x['x, 'f](f: 'x): 'x = f; def f['f, 'd](d: 'd): 'd = x['f, 'd](d); 6 }"
+    ),
+    List(
+      "Int",
+      "Type error"
+    )
+  )
+  test(interp("(((a: Int) => a)(26) + 6)"), "32")
+  test(interp("(((u: Int) => u)(26) * 6)"), "156")
+  test(interp("(((k: Int) => k)(26) / 6)"), "4")
+  test(interp("(26 / (-6))"), "-4")
+  test(interp("((-26) / 6)"), "-4")
+  test(interp("((-26) / (-6))"), "4")
+  testExc(interp("(26 / ((q: Int) => q)(0))"), "")
+  test(interp("(((w: Int) => w)(26) % 6)"), "2")
+  test(interp("(26 % (-6))"), "2")
+  test(interp("((-26) % 6)"), "-2")
+  test(interp("((-26) % (-6))"), "-2")
+  testExc(interp("(26 % ((g: Int) => g)(0))"), "")
+  test(interp("(((u: Int) => u)(6) == 6)"), "true")
+  test(interp("(6 == 26)"), "false")
+  test(interp("(((y: Int) => y)(6) < 6)"), "false")
+  test(interp("(6 < 26)"), "true")
+  test(interp("{ 26; ((e: Int) => e)(6) }"), "6")
+  test(interp("(if (((s: Int) => s)(true)) 6 else (26 / 0))"), "6")
+  test(interp("(if (((n: Int) => n)(false)) (6 / 0) else 26)"), "26")
+  test(interp("{ val x = 6; { val f = (() => x); { val x = 26; f() } } }"), "6")
+  test(interp("{ lazy val x: Int = (6 / 0); 26 }"), "26")
+  test(interp("{ var x = 6; { lazy val f: Int = { (x = (x + 1)); x }; ((f + f) + x) } }"), "21")
+  test(interp("{ def q(o: Int): Int = (if ((o < 3)) (o + 3) else (q((o + (-1))) + (o + 2))); q(12) }"), "100")
+  test(interp("{ def b(w: Int): Int = (if ((w < 2)) (w + 1) else (x((w + (-2)), (w + 3)) + (w + 2))); def r(c: Int, m: Int): Int = (if ((c < 3)) (c + 4) else (b((c + (-2))) + (c + 1))); def x(o: Int, p: Int): Int = (if ((o < 3)) (p + 1) else (r((o + (-2)), (p + 5)) + (p + 5))); b(11) }"), "65")
+  test(interp("{ var x = 6; (x = 26) }"), "()")
+  test(interp("{ var x = 6; { (x = 26); x } }"), "26")
+  test(interp("((x: Int, f: Int) => (x + f))(6, 26)"), "32")
+  test(interp("{ type x { case x case f } (x match { case f => 6 case x => 26 }) }"), "26")
+  test(interp("{ type x { case x(Int) case f(Int) } (x(6) match { case f(d) => 26 case x(d) => d }) }"), "6")
+  test(lib("""
+  var score = 0;
+  def check(b: Boolean): Unit =
+    if (b) score = score + 1;
+  {
+  check(!intEquals(6, 2));
+  check(intEquals(6, 6));
+  check(intMax(6, 26) == 26);
+  check(intMin(6, 26) == 6);
+  check(!booleanEquals(true, false));
+  check(booleanEquals(true, true));
+  check(unitEquals((), ()));
+  score
+  }
+  """), "Type: Int, Value: 7")
+  test(lib("""
+  var score = 0;
+  def check(b: Boolean): Unit =
+    if (b) score = score + 1;
+  val p1 = Pair[Int, Boolean](6, true);
+  val p2 = Pair[Int, Boolean](6, false);
+  val p3 = Pair[Int, Boolean](26, true);
+  val eq = pairEquals[Int, Boolean](intEquals, booleanEquals);
+  {
+  check(pairFst[Int, Boolean](p1) == 6);
+  check(pairSnd[Int, Boolean](p1));
+  check(pairFst[Int, Boolean](p2) == 6);
+  check(!pairSnd[Int, Boolean](p2));
+  check(pairFst[Int, Boolean](p3) == 26);
+  check(pairSnd[Int, Boolean](p3));
+  check(eq(p1, p1));
+  check(!eq(p1, p2));
+  check(!eq(p1, p3));
+  score
+  }
+  """), "Type: Int, Value: 9")
+  test(lib("""
+  var score = 0;
+  def check(b: Boolean): Unit =
+    if (b) score = score + 1;
+  val opt1 = Some[Int](1);
+  val opt2 = optionMap[Int, Int](opt1, (x: Int) => x + x);
+  val opt3 = optionFilter[Int](opt1, (x: Int) => x < 2);
+  val opt4 = optionFilter[Int](opt2, (x: Int) => x < 2);
+  val opt5 = optionFlatten[Int](Some[Option[Int]](opt1));
+  val opt6 = optionFlatten[Int](Some[Option[Int]](opt4));
+  val opt7 = optionFlatten[Int](None[Option[Int]]);
+  def aux(i: Int): Option[Int] =
+    if (i == 1) Some[Int](i) else None[Int];
+  val opt8 = optionFlatMap[Int, Int](opt1, aux);
+  val opt9 = optionFlatMap[Int, Int](opt2, aux);
+  val opt10 = optionFlatMap[Int, Int](opt4, aux);
+  val opt11 = optionFilterNot[Int](opt1, (x: Int) => x < 2);
+  val opt12 = optionFilterNot[Int](opt2, (x: Int) => x < 2);
+  val eq = optionEquals[Int](intEquals);
+  val eql = listEquals[Int](intEquals);
+  {
+  check(eq(Some[Int](6), Some[Int](6)));
+  check(!eq(Some[Int](6), Some[Int](26)));
+  check(!eq(Some[Int](6), None[Int]));
+  check(eq(None[Int], None[Int]));
+  check(eq(opt1, Some[Int](1)));
+  check(eq(opt2, Some[Int](2)));
+  check(eq(opt3, Some[Int](1)));
+  check(eq(opt4, None[Int]));
+  check(eq(opt5, Some[Int](1)));
+  check(eq(opt6, None[Int]));
+  check(eq(opt7, None[Int]));
+  check(eq(opt8, Some[Int](1)));
+  check(eq(opt9, None[Int]));
+  check(eq(opt10, None[Int]));
+  check(eq(opt11, None[Int]));
+  check(eq(opt12, Some[Int](2)));
+  check(!optionIsEmpty[Int](opt1));
+  check(optionIsEmpty[Int](opt4));
+  check(optionNonEmpty[Int](opt1));
+  check(!optionNonEmpty[Int](opt4));
+  check(eql(optionToList[Int](opt1), List1[Int](1)));
+  check(eql(optionToList[Int](opt4), List0[Int]()));
+  check(optionGetOrElse[Int](opt1, 0) == 1);
+  check(optionGetOrElse[Int](opt4, 0) == 0);
+  optionForeach[Int](opt1, (i: Int) => check(i == 1));
+  optionForeach[Int](opt4, (i: Int) => check(true));
+  score
+  }
+  """), "Type: Int, Value: 25")
+  test(lib("""
+  var score = 0;
+  def check(b: Boolean): Unit =
+    if (b) score = score + 1;
+  val b = Box[Int](6);
+  val i1 = boxGet[Int](b);
+  val i2 = boxSet[Int](b, 26);
+  val i3 = boxGet[Int](b);
+  val i4 = boxSet[Int](b, 6);
+  val i5 = boxGet[Int](b);
+  {
+  check(i1 == 6);
+  check(i2 == 6);
+  check(i3 == 26);
+  check(i4 == 26);
+  check(i5 == 6);
+  score
+  }
+  """), "Type: Int, Value: 5")
+  test(lib("""
+  var score = 0;
+  def check(b: Boolean): Unit =
+    if (b) score = score + 1;
+  val l0 = List5[Int](1, 2, 3, 4, 5);
+  val l1 = List3[Int](1, 2, 3);
+  val l2 = List2[Int](4, 5);
+  val zipped0 = listZip[Int, Int](l0, l0);
+  val unzipped0 = listUnzip[Int, Int](zipped0);
+  val l3 = pairFst[List[Int], List[Int]](unzipped0);
+  val l4 = pairSnd[List[Int], List[Int]](unzipped0);
+  val zipped1 = listZip[Int, Int](l0, l1);
+  val unzipped1 = listUnzip[Int, Int](zipped1);
+  val l5 = pairFst[List[Int], List[Int]](unzipped1);
+  val l6 = pairSnd[List[Int], List[Int]](unzipped1);
+  val zipped2 = listZipWithIndex[Int](l0);
+  val unzipped2 = listUnzip[Int, Int](zipped2);
+  val l7 = pairFst[List[Int], List[Int]](unzipped2);
+  val l8 = pairSnd[List[Int], List[Int]](unzipped2);
+  val eq = listEquals[Int](intEquals);
+  val eqo = optionEquals[Int](intEquals);
+  def odd(n: Int): Boolean = n % 2 != 0;
+  def lt4(n: Int): Boolean = n < 4;
+  {
+  check(eq(l0, l0));
+  check(!eq(l0, l1));
+  check(!eq(l0, l2));
+  check(!eq(l1, l2));
+  check(!eq(l0, Nil[Int]));
+  check(eq(Nil[Int], Nil[Int]));
+  check(eq(listAppended[Int](listAppended[Int](l1, 4), 5), l0));
+  check(eq(listConcat[Int](l1, l2), l0));
+  check(listCount[Int](l0, odd) == 3);
+  check(eq(listDrop[Int](l0, 3), l2));
+  check(listExists[Int](l0, lt4));
+  check(!listExists[Int](l2, lt4));
+  check(eq(listFilter[Int](l0, lt4), l1));
+  check(eq(listFilterNot[Int](l0, lt4), l2));
+  check(eqo(listFind[Int](l0, lt4), Some[Int](1)));
+  check(eqo(listFind[Int](l2, lt4), None[Int]));
+  check(eq(listFlatMap[Int, Int](l1, (n: Int) => if (n == 1) l1 else if (n == 2) l2 else Nil[Int]), l0));
+  check(eq(listFlatten[Int](List2[List[Int]](l1, l2)), l0));
+  check(listFoldLeft[Int, Int](0, l0, (n: Int, m: Int) => n + m) == 15);
+  check(listFoldRight[Int, Int](l0, 0, (n: Int, m: Int) => n + m) == 15);
+  check(!listForall[Int](l0, lt4));
+  check(listForall[Int](l1, lt4));
+  listForeach[Int](l0, (n: Int) => check(odd(n)));
+  check(eqo(listGet[Int](l0, 4), Some[Int](5)));
+  check(eqo(listGet[Int](l0, 5), None[Int]));
+  check(!listIsEmpty[Int](l0));
+  check(listIsEmpty[Int](Nil[Int]));
+  check(listLength[Int](l0) == 5);
+  check(eq(listMap[Int, Int](l0, (n: Int) => n * n), List5[Int](1, 4, 9, 16, 25)));
+  check(listNonEmpty[Int](l0));
+  check(!listNonEmpty[Int](Nil[Int]));
+  check(eq(listPrepended[Int](listPrepended[Int](listPrepended[Int](l2, 3), 2), 1), l0));
+  check(eq(listReverse[Int](l0), List5[Int](5, 4, 3, 2, 1)));
+  check(eq(listTake[Int](l0, 3), l1));
+  check(eq(l0, l3));
+  check(eq(l0, l4));
+  check(eq(l1, l5));
+  check(eq(l1, l6));
+  check(eq(l0, l7));
+  check(eq(l0, listMap[Int, Int](l8, (n: Int) => n + 1)));
+  score
+  }
+  """), "Type: Int, Value: 42")
+  test(lib("""
+  var score = 0;
+  def check(b: Boolean): Unit =
+    if (b) score = score + 1;
+  val m0 = Map1[Int, Int](intEquals, 0, 0);
+  val m1 = mapUpdated[Int, Int](m0, 1, 2);
+  val m2 = mapUpdated[Int, Int](m1, 2, 4);
+  val m3 = mapUpdated[Int, Int](m2, 3, 6);
+  val m4 = mapRemoved[Int, Int](m3, 2);
+  val m5 = mapUpdated[Int, Int](m2, 3, 26);
+  val eqo = optionEquals[Int](intEquals);
+  {
+  check(eqo(mapGet[Int, Int](m0, 0), Some[Int](0)));
+  check(eqo(mapGet[Int, Int](m0, 1), None[Int]));
+  check(eqo(mapGet[Int, Int](m0, 2), None[Int]));
+  check(eqo(mapGet[Int, Int](m0, 3), None[Int]));
+  check(eqo(mapGet[Int, Int](m0, 4), None[Int]));
+  check(eqo(mapGet[Int, Int](m1, 0), Some[Int](0)));
+  check(eqo(mapGet[Int, Int](m1, 1), Some[Int](2)));
+  check(eqo(mapGet[Int, Int](m1, 2), None[Int]));
+  check(eqo(mapGet[Int, Int](m1, 3), None[Int]));
+  check(eqo(mapGet[Int, Int](m1, 4), None[Int]));
+  check(eqo(mapGet[Int, Int](m2, 0), Some[Int](0)));
+  check(eqo(mapGet[Int, Int](m2, 1), Some[Int](2)));
+  check(eqo(mapGet[Int, Int](m2, 2), Some[Int](4)));
+  check(eqo(mapGet[Int, Int](m2, 3), None[Int]));
+  check(eqo(mapGet[Int, Int](m2, 4), None[Int]));
+  check(eqo(mapGet[Int, Int](m3, 0), Some[Int](0)));
+  check(eqo(mapGet[Int, Int](m3, 1), Some[Int](2)));
+  check(eqo(mapGet[Int, Int](m3, 2), Some[Int](4)));
+  check(eqo(mapGet[Int, Int](m3, 3), Some[Int](6)));
+  check(eqo(mapGet[Int, Int](m3, 4), None[Int]));
+  check(eqo(mapGet[Int, Int](m4, 0), Some[Int](0)));
+  check(eqo(mapGet[Int, Int](m4, 1), Some[Int](2)));
+  check(eqo(mapGet[Int, Int](m4, 2), None[Int]));
+  check(eqo(mapGet[Int, Int](m4, 3), Some[Int](6)));
+  check(eqo(mapGet[Int, Int](m4, 4), None[Int]));
+  check(eqo(mapGet[Int, Int](m5, 0), Some[Int](0)));
+  check(eqo(mapGet[Int, Int](m5, 1), Some[Int](2)));
+  check(eqo(mapGet[Int, Int](m5, 2), Some[Int](4)));
+  check(eqo(mapGet[Int, Int](m5, 3), Some[Int](26)));
+  check(eqo(mapGet[Int, Int](m5, 4), None[Int]));
+  score
+  }
+  """), "Type: Int, Value: 30")
+  test(lib("""
+  var score = 0;
+  def check(b: Boolean): Unit =
+    if (b) score = score + 1;
+  {
+  check(stringEquals("abc \n"<STRP, EOS>, List5[Int](97, 98, 99, 32, 10)));
+  check(stringEquals(substring("12abc \n"<STRP, EOS>, 2, 5), List3[Int](97, 98, 99)));
+  check("bca \n"<(n: Int, m: Int) => n + m, 0> == 336);
+  score
+  }
+  """), "Type: Int, Value: 3")
+  test(lib("""
+  type Expr {
+    case Num(Int)
+    case Add(Expr, Expr)
+    case Sub(Expr, Expr)
+    case Id(Int)
+    case Fun(Int, Expr)
+    case App(Expr, Expr)
+  }
+  type Value {
+    case NumV(Int)
+    case CloV(Int, Expr, Map[Int, Value])
+  }
+  def interp(e: Expr, env: Map[Int, Value]): Option[Value] = e match {
+    case Num(n) => Some[Value](NumV(n))
+    case Add(l, r) => optionFlatMap[Value, Value](interp(l, env), (lv: Value) => lv match {
+      case NumV(n) => optionFlatMap[Value, Value](interp(r, env),
+        (rv: Value) => rv match {
+          case NumV(m) => Some[Value](NumV(n + m))
+          case CloV(x, e, fenv) => None[Value]
+        }
+      )
+      case CloV(x, e, fenv) => None[Value]
     })
-  """), "2")
-  test(run("""
-    def f['T, 'S](t: 'T, s: 'S): 'T = t;
-    f[Int, Boolean](1, true)
-  """), "1")
-  test(run("""
-    type Fruit['T] {
-      case Apple
-      case Banana('T)
-    }
-    (Apple[Boolean] match {
-      case Apple => 1
-      case Banana(x) => 0
-    }) + (Banana[Int](1) match {
-      case Apple => 0
-      case Banana(x) => x
+    case Sub(l, r) => optionFlatMap[Value, Value](interp(l, env), (lv: Value) => lv match {
+      case NumV(n) => optionFlatMap[Value, Value](interp(r, env),
+        (rv: Value) => rv match {
+          case NumV(m) => Some[Value](NumV(n - m))
+          case CloV(x, e, fenv) => None[Value]
+        }
+      )
+      case CloV(x, e, fenv) => None[Value]
     })
-  """), "2")
-
-  test(runWithStdLib("""
-    var score = 0;
-    def check(b: Boolean): Unit =
-      if (b) score = score + 1;
-
-    {
-    check(!intEquals(1, 2));
-    check(intEquals(3, 3));
-    check(intMax(3, 6) == 6);
-    check(intMin(3, 6) == 3);
-    check(!booleanEquals(true, false));
-    check(booleanEquals(true, true));
-    check(unitEquals((), ()));
-
-    score
-    }
-  """), "7")
-  test(runWithStdLib("""
-    var score = 0;
-    def check(b: Boolean): Unit =
-      if (b) score = score + 1;
-
-    val p1 = Pair[Int, Boolean](1, true);
-    val p2 = Pair[Int, Boolean](1, false);
-    val p3 = Pair[Int, Boolean](2, true);
-
-    val eq = pairEquals[Int, Boolean](intEquals, booleanEquals);
-
-    {
-    check(pairFst[Int, Boolean](p1) == 1);
-    check(pairSnd[Int, Boolean](p1));
-    check(pairFst[Int, Boolean](p2) == 1);
-    check(!pairSnd[Int, Boolean](p2));
-    check(pairFst[Int, Boolean](p3) == 2);
-    check(pairSnd[Int, Boolean](p3));
-    check(eq(p1, p1));
-    check(!eq(p1, p2));
-    check(!eq(p1, p3));
-
-    score
-    }
-  """), "9")
-  test(runWithStdLib("""
-    var score = 0;
-    def check(b: Boolean): Unit =
-      if (b) score = score + 1;
-
-    val opt1 = Some[Int](1);
-    val opt2 = optionMap[Int, Int](opt1, (x: Int) => x + x);
-    val opt3 = optionFilter[Int](opt1, (x: Int) => x < 2);
-    val opt4 = optionFilter[Int](opt2, (x: Int) => x < 2);
-    val opt5 = optionFlatten[Int](Some[Option[Int]](opt1));
-    val opt6 = optionFlatten[Int](Some[Option[Int]](opt4));
-    val opt7 = optionFlatten[Int](None[Option[Int]]);
-
-    def aux(i: Int): Option[Int] =
-      if (i == 1) Some[Int](i) else None[Int];
-
-    val opt8 = optionFlatMap[Int, Int](opt1, aux);
-    val opt9 = optionFlatMap[Int, Int](opt2, aux);
-    val opt10 = optionFlatMap[Int, Int](opt4, aux);
-    val opt11 = optionFilterNot[Int](opt1, (x: Int) => x < 2);
-    val opt12 = optionFilterNot[Int](opt2, (x: Int) => x < 2);
-
-    val eq = optionEquals[Int](intEquals);
-    val eql = listEquals[Int](intEquals);
-
-    {
-    check(eq(Some[Int](1), Some[Int](1)));
-    check(!eq(Some[Int](1), Some[Int](2)));
-    check(!eq(Some[Int](1), None[Int]));
-    check(eq(None[Int], None[Int]));
-    check(eq(opt1, Some[Int](1)));
-    check(eq(opt2, Some[Int](2)));
-    check(eq(opt3, Some[Int](1)));
-    check(eq(opt4, None[Int]));
-    check(eq(opt5, Some[Int](1)));
-    check(eq(opt6, None[Int]));
-    check(eq(opt7, None[Int]));
-    check(eq(opt8, Some[Int](1)));
-    check(eq(opt9, None[Int]));
-    check(eq(opt10, None[Int]));
-    check(eq(opt11, None[Int]));
-    check(eq(opt12, Some[Int](2)));
-    check(!optionIsEmpty[Int](opt1));
-    check(optionIsEmpty[Int](opt4));
-    check(optionNonEmpty[Int](opt1));
-    check(!optionNonEmpty[Int](opt4));
-    check(eql(optionToList[Int](opt1), List1[Int](1)));
-    check(eql(optionToList[Int](opt4), List0[Int]()));
-    check(optionGetOrElse[Int](opt1, 0) == 1);
-    check(optionGetOrElse[Int](opt4, 0) == 0);
-    optionForeach[Int](opt1, (i: Int) => check(i == 1));
-    optionForeach[Int](opt4, (i: Int) => check(true));
-
-    score
-    }
-  """), "25")
-  test(runWithStdLib("""
-    var score = 0;
-    def check(b: Boolean): Unit =
-      if (b) score = score + 1;
-
-    val b = Box[Int](1);
-    val i1 = boxGet[Int](b);
-    val i2 = boxSet[Int](b, 2);
-    val i3 = boxGet[Int](b);
-    val i4 = boxSet[Int](b, 1);
-    val i5 = boxGet[Int](b);
-
-    {
-    check(i1 == 1);
-    check(i2 == 1);
-    check(i3 == 2);
-    check(i4 == 2);
-    check(i5 == 1);
-
-    score
-    }
-  """), "5")
-  test(runWithStdLib("""
-    var score = 0;
-    def check(b: Boolean): Unit =
-      if (b) score = score + 1;
-
-    val l0 = List5[Int](1, 2, 3, 4, 5);
-    val l1 = List3[Int](1, 2, 3);
-    val l2 = List2[Int](4, 5);
-    val zipped0 = listZip[Int, Int](l0, l0);
-    val unzipped0 = listUnzip[Int, Int](zipped0);
-    val l3 = pairFst[List[Int], List[Int]](unzipped0);
-    val l4 = pairSnd[List[Int], List[Int]](unzipped0);
-    val zipped1 = listZip[Int, Int](l0, l1);
-    val unzipped1 = listUnzip[Int, Int](zipped1);
-    val l5 = pairFst[List[Int], List[Int]](unzipped1);
-    val l6 = pairSnd[List[Int], List[Int]](unzipped1);
-    val zipped2 = listZipWithIndex[Int](l0);
-    val unzipped2 = listUnzip[Int, Int](zipped2);
-    val l7 = pairFst[List[Int], List[Int]](unzipped2);
-    val l8 = pairSnd[List[Int], List[Int]](unzipped2);
-
-    val eq = listEquals[Int](intEquals);
-    val eqo = optionEquals[Int](intEquals);
-    def odd(n: Int): Boolean = n % 2 != 0;
-    def lt4(n: Int): Boolean = n < 4;
-
-    {
-    check(eq(l0, l0));
-    check(!eq(l0, l1));
-    check(!eq(l0, l2));
-    check(!eq(l1, l2));
-    check(!eq(l0, Nil[Int]));
-    check(eq(Nil[Int], Nil[Int]));
-    check(eq(listAppended[Int](listAppended[Int](l1, 4), 5), l0));
-    check(eq(listConcat[Int](l1, l2), l0));
-    check(listCount[Int](l0, odd) == 3);
-    check(eq(listDrop[Int](l0, 3), l2));
-    check(listExists[Int](l0, lt4));
-    check(!listExists[Int](l2, lt4));
-    check(eq(listFilter[Int](l0, lt4), l1));
-    check(eq(listFilterNot[Int](l0, lt4), l2));
-    check(eqo(listFind[Int](l0, lt4), Some[Int](1)));
-    check(eqo(listFind[Int](l2, lt4), None[Int]));
-    check(eq(listFlatMap[Int, Int](l1, (n: Int) => if (n == 1) l1 else if (n == 2) l2 else Nil[Int]), l0));
-    check(eq(listFlatten[Int](List2[List[Int]](l1, l2)), l0));
-    check(listFoldLeft[Int, Int](0, l0, (n: Int, m: Int) => n + m) == 15);
-    check(listFoldRight[Int, Int](l0, 0, (n: Int, m: Int) => n + m) == 15);
-    check(!listForall[Int](l0, lt4));
-    check(listForall[Int](l1, lt4));
-    listForeach[Int](l0, (n: Int) => check(odd(n)));
-    check(eqo(listGet[Int](l0, 4), Some[Int](5)));
-    check(eqo(listGet[Int](l0, 5), None[Int]));
-    check(!listIsEmpty[Int](l0));
-    check(listIsEmpty[Int](Nil[Int]));
-    check(listLength[Int](l0) == 5);
-    check(eq(listMap[Int, Int](l0, (n: Int) => n * n), List5[Int](1, 4, 9, 16, 25)));
-    check(listNonEmpty[Int](l0));
-    check(!listNonEmpty[Int](Nil[Int]));
-    check(eq(listPrepended[Int](listPrepended[Int](listPrepended[Int](l2, 3), 2), 1), l0));
-    check(eq(listReverse[Int](l0), List5[Int](5, 4, 3, 2, 1)));
-    check(eq(listTake[Int](l0, 3), l1));
-    check(eq(l0, l3));
-    check(eq(l0, l4));
-    check(eq(l1, l5));
-    check(eq(l1, l6));
-    check(eq(l0, l7));
-    check(eq(l0, listMap[Int, Int](l8, (n: Int) => n + 1)));
-
-    score
-    }
-  """), "42")
-  test(runWithStdLib("""
-    var score = 0;
-    def check(b: Boolean): Unit =
-      if (b) score = score + 1;
-
-    val m0 = Map1[Int, Int](intEquals, 0, 0);
-    val m1 = mapUpdated[Int, Int](m0, 1, 2);
-    val m2 = mapUpdated[Int, Int](m1, 2, 4);
-    val m3 = mapUpdated[Int, Int](m2, 3, 6);
-    val m4 = mapRemoved[Int, Int](m3, 2);
-    val m5 = mapUpdated[Int, Int](m2, 3, 8);
-
-    val eqo = optionEquals[Int](intEquals);
-
-    {
-    check(eqo(mapGet[Int, Int](m0, 0), Some[Int](0)));
-    check(eqo(mapGet[Int, Int](m0, 1), None[Int]));
-    check(eqo(mapGet[Int, Int](m0, 2), None[Int]));
-    check(eqo(mapGet[Int, Int](m0, 3), None[Int]));
-    check(eqo(mapGet[Int, Int](m0, 4), None[Int]));
-
-    check(eqo(mapGet[Int, Int](m1, 0), Some[Int](0)));
-    check(eqo(mapGet[Int, Int](m1, 1), Some[Int](2)));
-    check(eqo(mapGet[Int, Int](m1, 2), None[Int]));
-    check(eqo(mapGet[Int, Int](m1, 3), None[Int]));
-    check(eqo(mapGet[Int, Int](m1, 4), None[Int]));
-
-    check(eqo(mapGet[Int, Int](m2, 0), Some[Int](0)));
-    check(eqo(mapGet[Int, Int](m2, 1), Some[Int](2)));
-    check(eqo(mapGet[Int, Int](m2, 2), Some[Int](4)));
-    check(eqo(mapGet[Int, Int](m2, 3), None[Int]));
-    check(eqo(mapGet[Int, Int](m2, 4), None[Int]));
-
-    check(eqo(mapGet[Int, Int](m3, 0), Some[Int](0)));
-    check(eqo(mapGet[Int, Int](m3, 1), Some[Int](2)));
-    check(eqo(mapGet[Int, Int](m3, 2), Some[Int](4)));
-    check(eqo(mapGet[Int, Int](m3, 3), Some[Int](6)));
-    check(eqo(mapGet[Int, Int](m3, 4), None[Int]));
-
-    check(eqo(mapGet[Int, Int](m4, 0), Some[Int](0)));
-    check(eqo(mapGet[Int, Int](m4, 1), Some[Int](2)));
-    check(eqo(mapGet[Int, Int](m4, 2), None[Int]));
-    check(eqo(mapGet[Int, Int](m4, 3), Some[Int](6)));
-    check(eqo(mapGet[Int, Int](m4, 4), None[Int]));
-
-    check(eqo(mapGet[Int, Int](m4, 0), Some[Int](0)));
-    check(eqo(mapGet[Int, Int](m4, 1), Some[Int](2)));
-    check(eqo(mapGet[Int, Int](m4, 2), None[Int]));
-    check(eqo(mapGet[Int, Int](m4, 3), Some[Int](6)));
-    check(eqo(mapGet[Int, Int](m4, 4), None[Int]));
-
-    score
-    }
-  """), "30")
-  test(runWithStdLib("""
-    var score = 0;
-    def check(b: Boolean): Unit =
-      if (b) score = score + 1;
-
-    {
-    check(stringEquals("abc \n"<STRP, EOS>, List5[Int](97, 98, 99, 32, 10)));
-    check(stringEquals(substring("12abc \n"<STRP, EOS>, 2, 5), List3[Int](97, 98, 99)));
-    check("abc \n"<(n: Int, m: Int) => n + m, 0> == 336);
-
-    score
-    }
-  """), "3")
-  test(runWithStdLib("""
-    type Expr {
-      case Num(Int)
-      case Add(Expr, Expr)
-      case Sub(Expr, Expr)
-      case Id(Int)
-      case Fun(Int, Expr)
-      case App(Expr, Expr)
-    }
-
-    type Value {
-      case NumV(Int)
-      case CloV(Int, Expr, Map[Int, Value])
-    }
-
-    def interp(e: Expr, env: Map[Int, Value]): Option[Value] = e match {
-      case Num(n) => Some[Value](NumV(n))
-      case Add(l, r) => optionFlatMap[Value, Value](interp(l, env), (lv: Value) => lv match {
-        case NumV(n) => optionFlatMap[Value, Value](interp(r, env),
-          (rv: Value) => rv match {
-            case NumV(m) => Some[Value](NumV(n + m))
-            case CloV(x, e, fenv) => None[Value]
-          }
+    case Id(x) => mapGet[Int, Value](env, x)
+    case Fun(x, e) => Some[Value](CloV(x, e, env))
+    case App(f, a) => optionFlatMap[Value, Value](interp(f, env), (fv: Value) => fv match {
+      case NumV(n) => None[Value]
+      case CloV(x, e, fenv) => optionFlatMap[Value, Value](interp(a, env),
+        (av: Value) => interp(e, mapUpdated[Int, Value](fenv, x, av))
+      )
+    })
+  };
+  lazy val digit: Parser[Expr] =
+    parserMap[Int, Expr](
+      () => parserCond((x: Int) => 48 <= x && x < 58),
+      (x: Int) => Num(x - 48)
+    );
+  lazy val add: Parser[Expr] =
+    parserMap[Pair[Int, Pair[Expr, Expr]], Expr](
+      () => parserThen[Int, Pair[Expr, Expr]](
+        () => parserConst(43),
+        () => parserThen[Expr, Expr](() => e, () => e)
+      ),
+      (p: Pair[Int, Pair[Expr, Expr]]) =>
+        pairSnd[Int, Pair[Expr, Expr]](p) match {
+          case Pair(l, r) => Add(l, r)
+        }
+    );
+  lazy val sub: Parser[Expr] =
+    parserMap[Pair[Int, Pair[Expr, Expr]], Expr](
+      () => parserThen[Int, Pair[Expr, Expr]](
+        () => parserConst(45),
+        () => parserThen[Expr, Expr](() => e, () => e)
+      ),
+      (p: Pair[Int, Pair[Expr, Expr]]) =>
+        pairSnd[Int, Pair[Expr, Expr]](p) match {
+          case Pair(l, r) => Sub(l, r)
+        }
+    );
+  lazy val id: Parser[Expr] =
+    parserMap[Int, Expr](
+      () => parserCond((x: Int) => 97 <= x && x <= 122),
+      (x: Int) => Id(x)
+    );
+  lazy val fun: Parser[Expr] =
+    parserMap[Pair[Int, Pair[Int, Expr]], Expr](
+      () => parserThen[Int, Pair[Int, Expr]](
+        () => parserConst(47),
+        () => parserThen[Int, Expr](
+          () => parserCond((x: Int) => 97 <= x && x <= 122),
+          () => e
         )
-        case CloV(x, e, fenv) => None[Value]
-      })
-      case Sub(l, r) => optionFlatMap[Value, Value](interp(l, env), (lv: Value) => lv match {
-        case NumV(n) => optionFlatMap[Value, Value](interp(r, env),
-          (rv: Value) => rv match {
-            case NumV(m) => Some[Value](NumV(n - m))
-            case CloV(x, e, fenv) => None[Value]
-          }
-        )
-        case CloV(x, e, fenv) => None[Value]
-      })
-      case Id(x) => mapGet[Int, Value](env, x)
-      case Fun(x, e) => Some[Value](CloV(x, e, env))
-      case App(f, a) => optionFlatMap[Value, Value](interp(f, env), (fv: Value) => fv match {
-        case NumV(n) => None[Value]
-        case CloV(x, e, fenv) => optionFlatMap[Value, Value](interp(a, env),
-          (av: Value) => interp(e, mapUpdated[Int, Value](fenv, x, av))
-        )
-      })
-    };
-
-    lazy val digit: Parser[Expr] =
-      parserMap[Int, Expr](
-        () => parserCond((x: Int) => 48 <= x && x < 58),
-        (x: Int) => Num(x - 48)
-      );
-
-    lazy val add: Parser[Expr] =
-      parserMap[Pair[Int, Pair[Expr, Expr]], Expr](
-        () => parserThen[Int, Pair[Expr, Expr]](
-          () => parserConst(43),
-          () => parserThen[Expr, Expr](() => e, () => e)
-        ),
-        (p: Pair[Int, Pair[Expr, Expr]]) =>
-          pairSnd[Int, Pair[Expr, Expr]](p) match {
-            case Pair(l, r) => Add(l, r)
-          }
-      );
-
-    lazy val sub: Parser[Expr] =
-      parserMap[Pair[Int, Pair[Expr, Expr]], Expr](
-        () => parserThen[Int, Pair[Expr, Expr]](
-          () => parserConst(45),
-          () => parserThen[Expr, Expr](() => e, () => e)
-        ),
-        (p: Pair[Int, Pair[Expr, Expr]]) =>
-          pairSnd[Int, Pair[Expr, Expr]](p) match {
-            case Pair(l, r) => Sub(l, r)
-          }
-      );
-
-    lazy val id: Parser[Expr] =
-      parserMap[Int, Expr](
-        () => parserCond((x: Int) => 97 <= x && x <= 122),
-        (x: Int) => Id(x)
-      );
-
-    lazy val fun: Parser[Expr] =
-      parserMap[Pair[Int, Pair[Int, Expr]], Expr](
-        () => parserThen[Int, Pair[Int, Expr]](
-          () => parserConst(47),
-          () => parserThen[Int, Expr](
-            () => parserCond((x: Int) => 97 <= x && x <= 122),
-            () => e
-          )
-        ),
-        (p: Pair[Int, Pair[Int, Expr]]) =>
-          pairSnd[Int, Pair[Int, Expr]](p) match {
-            case Pair(p, b) => Fun(p, b)
-          }
-      );
-
-    lazy val app: Parser[Expr] =
-      parserMap[Pair[Int, Pair[Expr, Expr]], Expr](
-        () => parserThen[Int, Pair[Expr, Expr]](
-          () => parserConst(64),
-          () => parserThen[Expr, Expr](() => e, () => e)
-        ),
-        (p: Pair[Int, Pair[Expr, Expr]]) =>
-          pairSnd[Int, Pair[Expr, Expr]](p) match {
-            case Pair(l, r) => App(l, r)
-          }
-      );
-
-    lazy val e: Parser[Expr] =
-      parserOr[Expr](
+      ),
+      (p: Pair[Int, Pair[Int, Expr]]) =>
+        pairSnd[Int, Pair[Int, Expr]](p) match {
+          case Pair(p, b) => Fun(p, b)
+        }
+    );
+  lazy val app: Parser[Expr] =
+    parserMap[Pair[Int, Pair[Expr, Expr]], Expr](
+      () => parserThen[Int, Pair[Expr, Expr]](
+        () => parserConst(64),
+        () => parserThen[Expr, Expr](() => e, () => e)
+      ),
+      (p: Pair[Int, Pair[Expr, Expr]]) =>
+        pairSnd[Int, Pair[Expr, Expr]](p) match {
+          case Pair(l, r) => App(l, r)
+        }
+    );
+  lazy val e: Parser[Expr] =
+    parserOr[Expr](
+      () => parserOr[Expr](
         () => parserOr[Expr](
           () => parserOr[Expr](
             () => parserOr[Expr](
-              () => parserOr[Expr](
-                () => digit,
-                () => add
-              ),
-              () => sub
+              () => digit,
+              () => add
             ),
-            () => id
+            () => sub
           ),
-          () => fun
+          () => id
         ),
-        () => app
-      );
-
-    parseAll[Expr](e, "@@/x/y+xy23"<STRP, EOS>) match {
-      case None => -1
-      case Some(e) => interp(e, Map0[Int, Value](intEquals)) match {
-        case None => -2
-        case Some(v) => v match {
-          case NumV(n) => if (n < 0) -3 else n
-          case CloV(x, e, env) => -4
-        }
+        () => fun
+      ),
+      () => app
+    );
+  parseAll[Expr](e, "@@/x/y+xy62"<STRP, EOS>) match {
+    case None => -1
+    case Some(e) => interp(e, Map0[Int, Value](intEquals)) match {
+      case None => -2
+      case Some(v) => v match {
+        case NumV(n) => if (n < 0) -3 else n
+        case CloV(x, e, env) => -4
       }
     }
-  """), "5")
-
-	// Fall 2020
-
-  test(run("5 % -3"), "2")
-  test(run("if(42/6 > 42%7) 1*0 else 1/0"), "0")
-  test(run("""
-    var x:Int = 0;
-    val y = (x = 1);
-    y
-  """), "()")
-  test(run("""
-    def f(x:Int):Int = if (x == 0) 0 else (if (x % 3 == 2) h(x - 1) else x + g(x - 1));
-    def g(x:Int):Int = if (x == 0) 0 else (if (x % 3 != 1) f(x - 1) else x + h(x - 1));
-    def h(x:Int):Int = if (x == 0) 0 else (if (x % 3 == 0) g(x - 1) else x + f(x - 1));
-    f(9)
-  """), "24")
-  test(run("""
-    var sum = 0;
-    def append(d:Int):Unit = sum = sum * 10 + d;
-    {append(1);(x:Int, y:Int) => if({append(6); x} == {append(7); y}) sum else 0}(
-      {append(2); 1} + {append(3); 2},
-      {append(4); 15} % {append(5); 4}
-    )
-  """), "1234567")
-  test(run("""
-    type Adder {
-      case add0
-      case add1(Int)
-      case add2(Int, Int)
-    }
-    add2(4, 2) match {
-      case add2(x, y) => x + y
-      case add0 => 0
-      case add1(x) => x
-    }
-  """), "6")
-  test(run("lazy val x:Int = 3 / 0; 42"), "42")
-  test(run("var x:Int = 0; lazy val y:Int = {x = x + 1; x}; y + y"), "2")
-  test(run("var x:Boolean = false; lazy val y:Boolean = x; {x = !x; y}"), "true")
-  test(run("""
-    type fruit {case apple case orange}
-    val x = orange match {case apple => 1 case orange => 2};
-    type color {case red case orange}
-    val y = orange match {case red => 4 case orange => 8};
-    x + y
-  """), "10")
-  test(run("""
-    type fruit {case apple case orange}
-    val x = orange;
-    type color {case red case orange}
-    x match {
-      case apple => 0
-      case orange => 1
-    }
-  """), "1")
-  test(run("""
-    val y:Int = 0;
-    lazy val x:Int = y;
-    val y:Int = 1;
-    x
-  """), "0")
-  test(run("""
-    type t {case c(Int)}
-    val x:Int = 0;
-    c(1) match {case c(x) => x}
-  """), "1")
-  test(run("""
-    var x = 0;
-    def f(t:Int):Int = x;
-    val y = f(0);
-    {x = 1;
-    val x = 2;
-    var x = 3;
-    {x = 4;
-    y + f(0)}}
-  """), "1")
-  testExc(run("(3 + 4) % (3 - 3)"), "")
-
-  test(run("""
-    type x['x] {case x('x)}
-    val x = x[Int](0) match {case x(x) => x};
-    x
-  """), "0")
-  test(run("""
-    type x['x] {case x('x)}
-    def f['x](x:x['x]):'x = x match {case x(x)=>x};
-    f[Int](x[Int](0))
-  """), "0")
-  test(run("""
-    def app['a, 'b](f:'a=>'b, x:'a):'b = f(x);
-    def app2['a, 'b](f:'b=>'a, x:'b):'a = app['b,'a](f,x);
-    app2[Boolean, Int]((x:Int)=>x%2==0, 42)
-  """), "true")
-
-  test(typeOf("1 + 1", "true + 1"), ("Int", "!Error!"))
-  test(typeOf("def f(): Int = 1 + f(); f() + 1"), "Int")
-  test(typeOf("1 - 1", "1 - false"), ("Int", "!Error!"))
-  test(typeOf("def f(): Int = 1 + f(); f() - 1"), "Int")
-  test(typeOf("1 * 1", "365 * ()"), ("Int", "!Error!"))
-  test(typeOf("def f(): Int = 1 + f(); f() * 1"), "Int")
-  test(typeOf("1 / 1", "1 / true"), ("Int", "!Error!"))
-  test(typeOf("def f(): Int = 1 + f(); f() / 1"), "Int")
-  test(typeOf("1 % 1", "false % true"), ("Int", "!Error!"))
-  test(typeOf("def f(): Int = 1 + f(); f() % 1"), "Int")
-  test(typeOf("1 == 1", "false == 1"), ("Boolean", "!Error!"))
-  test(typeOf("1 < 1", "() < ()"), ("Boolean", "!Error!"))
-  test(typeOf("def f(): Int = 1 + f(); { f(); 1 }"), "Int")
-  test(typeOf("if (false) false else true"), "Boolean")
-  test(typeOf("val x = 1; val x = true; x"), "Boolean")
-  test(typeOf("(x: Int) => x"), "(Int => Int)")
-  test(typeOf("(x: Int) => x", "(x: 'T) => x"), ("(Int => Int)", "!Error!"))
-  test(typeOf("(x: Int) => x", "(x: Int) => y"), ("(Int => Int)", "!Error!"))
-  test(typeOf("((x: Int) => x)(1)"), "Int")
-  test(typeOf("var x: Int = 1; { x = 10; 1 }"), "Int")
-  test(typeOf("var x: Int = 1; { x = 10; 1 }", "var x: Int = 10; { x = true; x }"), ("Int", "!Error!"))
-
-  test(typeOf("""
-  val x = 1;
-  type A {
-    case Y(Boolean)
   }
-  Y(true) match {
-    case Y(x) => x
-  }
-  """), "Boolean")
-  test(typeOf("1", "a + 1"), ("Int", "!Error!"))
-  test(typeOf("type A['T] { case X } 1", """
-  type A {
-    case X
-  }
-  X
-  """), ("Int", "!Error!"))
-  test(typeOf("type A['T] { case X } 1", """
-  type A['T] {
-    case X
-  }
-  type B['S] {
-    case Y('T)
-  }
-  1
-  """), ("Int", "!Error!"))
-  test(typeOf("def id['T](x: 'T): 'T = x; id[Boolean](true)", """
-  def id['T](x: 'T): 'T = x;
-  id[Boolean](1)
-  """), ("Boolean", "!Error!"))
-  test(typeOf("def id['T](y: 'T): 'T = y; id[Boolean](true)", """
-  def id['T](x: 'T): 'T = x;
-  def id2['S](y: 'S): 'S = id['S](y);
-  id2[Int](1)
-  """), ("Boolean", "Int"))
-  test(typeOf("def id['T](z: 'T): 'T = z; id[Boolean](true)", """
-  def f['T, 'S](t: 'T): 'T = t;
-  def g['S](): Int = f['S, Int](1);
-  g[Boolean]()
-  """), ("Boolean", "!Error!"))
-  test(typeOf(
-  "type A['T] { case X } 1",
-  "def id['T](x: 'T): 'T = x; id[Boolean](true)", """
-  type A {
-    case X(B['S])
-  }
-  type B['S] {
-    case Y('S)
-  }
-  def x['S](i: 'S): A = X(Y['S](i));
-  def y['S](): 'S = x[Boolean](false) match {
-    case X(b) => b
-  } match {
-    case Y(k) => k
-  };
-  y[Int]()
-  """), ("Int", "Boolean", "!Error!"))
-  test(typeOf(
-  "type A['T] { case X } 1",
-  "def id['T](y: 'T): 'T = y; id[Boolean](true)", """
-  type A['T] {
-    case X('T)
-  }
-  def id['T](x: 'T): 'T = x;
-  X[Int](1) match {
-      case X(i) => id['T](i)
-  }
-  """), ("Int", "Boolean", "!Error!"))
-
-  // Spring 2021
-
-  test(run("var x: Int = 0; val y = (x = 1); y"), "()")
-  test(run("(1 % -1)"), "0")
-  test(run("{ def z(): Int = 1; { val z = 1; ((t: Boolean, q: Boolean) => z) }(true, false) }"), "1")
-  test(run("{ val z = 1; { def z(): Int = 2; z } }"), "<function>")
-  testExc(run("1 / 0"), "")
-  testExc(run("1 % 0"), "")
-  testExc(run("1 / (1 / 2)"), "")
-  testExc(run("1 % (1 / 2)"), "")
-
-  test(typeOf(
-    "val x = 1; x",
-    "x",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def id(x: Int): Int = x; id(1)",
-    "def id(x: Int): Int = x; id[Int](1)",
-    "def id(x: Int): Int = x; id[Int, Boolean](1)",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "def id['T](x: 'T): 'T = x; id[Int](1)",
-    "def id['T](x: 'T): 'T = x; id(1)",
-    "def id['T](x: 'T): 'T = x; id[Int, Boolean](1)",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A['T] { case A('T) } { A[Int](1); 0 }",
-    "type A['T] { case A('T) } { A(1); 0 }",
-    "type A['T] { case A('T) } { A[Int, Boolean](1); 0 }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A } { type B { case A } 0 }",
-    "type A { case A } { type A { case A } 0 }",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def id['T](x: 'T): 'T = { def id['S](x: 'S): 'S = x; x }; 0",
-    "def id['T](x: 'T): 'T = { def id['T](x: 'T): 'T = x; x }; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def id['T](x: 'T): 'T = { type A['S] { case A } x }; 0",
-    "def id['T](x: 'T): 'T = { type A['T] { case A } x }; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "var x = 1; { x = 2; x }",
-    "val x = 1; { x = 2; x }",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def id(x: Int): Int = x; id(1)",
-    "def id(x: Int): Int = x; id()",
-    "def id(x: Int): Int = x; id(1, 2)",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A(Int) } { A(1); 0 }",
-    "type A { case A(Int) } { A(); 0 }",
-    "type A { case A(Int) } { A(1, 2); 0 }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "((x: Int) => x)(1)",
-    "1(1)",
-    "true(1)",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x case B(x) => x }",
-    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x }",
-    "type A { case A(Int) case B(Int) } A(1) match { case B(x) => x }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x case B(x) => x }",
-    "type A { case A(Int) case B(Int) } A(1) match { case A(x) => x case C(x) => x }",
-    "type A { case A(Int) case B(Int) } A(1) match { case B(x) => x case C(x) => x }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => 0 }",
-    "type A { case A(Int) case B } A(1) match { case A => 0 case B => 0 }",
-    "type A { case A(Int) case B } A(1) match { case A(x) => x case B(x) => x }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => 0 }",
-    "type A { case A(Int) case B } 1 match { case A(x) => x case B => 0 }",
-    "type A { case A(Int) case B } true match { case A(x) => x case B => 0 }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "if (true) 1 else 2",
-    "if (1) 1 else 2",
-    "if (()) 1 else 2",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "if (true) 1 else 2",
-    "if (true) 1 else true",
-    "if (true) () else 2",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "val x: Int = 1; x",
-    "val x: Int = true; x",
-    "val x: Boolean = 1; x",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "lazy val x: Int = 1; x",
-    "lazy val x: Int = true; x",
-    "lazy val x: Boolean = 1; x",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "def id(x: Int): Int = x; 0",
-    "def id(x: Int): Int = true; 0",
-    "def id(x: Int): Boolean = x; 0",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "var x = 1; { x = 2; x }",
-    "var x = true; { x = 1; x }",
-    "var x = 1; { x = true; x }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "((x: Int) => x)(0)",
-    "((x: Int) => x)(true)",
-    "((x: Boolean) => x)(0)",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => 0 }",
-    "type A { case A(Int) case B } A(1) match { case A(x) => x case B => true }",
-    "type A { case A(Int) case B } A(1) match { case A(x) => true case B => 0 }",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "2 + 2",
-    "true + 2",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "2 * 2",
-    "365 * ()",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "2 / 2",
-    "2 / true",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "2 % 2",
-    "false % true"
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "2 == 2",
-    "false == 2",
-  ), ("Boolean", "!Error!"))
-  test(typeOf(
-    "2 < 2",
-    "() < ()",
-  ), ("Boolean", "!Error!"))
-  test(typeOf(
-    "type A { case A } val x = (y: A) => y; 0",
-    "type A { case A } val x = (y: B) => y; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } val x = (y: A) => y; 0",
-    "def foo['T](): Int = { val x = (y: T) => y; 0 }; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def foo['T](): Int = { val x = (y: 'T) => y; 0 }; 0",
-    "def foo['T](): Int = { val x = (y: 'S) => y; 0 }; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def foo['T](): Int = { val x = (y: 'T) => y; 0 }; 0",
-    "type A { case A } val x = (y: 'A) => y; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A['T] { case A } val x = (y: A[Int]) => y; 0",
-    "type A['T] { case A } val x = (y: A) => y; 0",
-    "type A['T] { case A } val x = (y: A[Int, Boolean]) => y; 0",
-  ), ("Int", "!Error!", "!Error!"))
-  test(typeOf(
-    "type A { case A } val x = (y: A => Int) => y; 0",
-    "type A { case A } val x = (y: B => Int) => y; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A['T] { case A } val x = (y: A[Int]) => y; 0",
-    "type A['T] { case A } val x = (y: A[B]) => y; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } def id['T](x: 'T): 'T = x; { id[A]; 0 }",
-    "type A { case A } def id['T](x: 'T): 'T = x; { id[B]; 0 }",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } { (x: A) => x; 0 }",
-    "type A { case A } { (x: B) => x; 0 }",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } val x: A = A; 0",
-    "type A { case A } val x: B = A; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } lazy val x: A = A; 0",
-    "type A { case A } lazy val x: B = A; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } def f(x: A): Int = 0; 0",
-    "type A { case A } def f(x: B): Int = 0; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } def f(x: Int): A = A; 0",
-    "type A { case A } def f(x: Int): B = A; 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A(A) } 0",
-    "type A { case A(B) } 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A { case A } 0",
-    "type A { case A } A",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A['T] { case A } type B['S] { case B('S) } 1",
-    "type A['T] { case A } type B['S] { case B('T) } 1",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def id['T](x: 'T): 'T = x; id[Boolean](true)",
-    "def id['T](x: 'T): 'T = x; id[Boolean](1)",
-  ), ("Boolean", "!Error!"))
-  test(typeOf(
-    "def foo['X, 'Y](x: 'X): 'X = x; def bar['Y, 'Z](z: 'Z): 'Z = foo['Z, 'Z](z); 0",
-    "def foo['X, 'Y](x: 'X): 'X = x; def bar['Y, 'Z](z: 'Z): 'Z = foo['Y, 'Z](z); 0",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "type A['T] { case A } { A[Int]; 0 }",
-    "type A['T] { case A } { A['T]; 0 }",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "def f['T](x: 'T): 'T = x; { f[Int]; 0 }",
-    "def f['T](x: 'T): 'T = x; { f['T]; 0 }",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "{ type A { case A } 0; (x: Int) => 0; 0 }",
-    "{ type A { case A } 0; (x: A) => 0; 0 }",
-  ), ("Int", "!Error!"))
-  test(typeOf(
-    "((z: Int, w: Int, x: Int) => w)(0, ((x: Int, v: Int) => x)(3, 3), 0)",
-    "((z: Int, w: Int, x: Int) => w)(0, ((x: Int, v: Int) => z)(3, 3), 0)",
-  ), ("Int", "!Error!"))
+  """), "Type: Int, Value: 8")
 
   /* Write your own tests */
 }
