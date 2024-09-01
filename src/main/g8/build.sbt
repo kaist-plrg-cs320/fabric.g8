@@ -1,6 +1,6 @@
 name := "fabric"
 
-ThisBuild / scalaVersion := "2.13.12"
+ThisBuild / scalaVersion := "2.13.14"
 ThisBuild / scalacOptions ++= Seq("-feature", "-deprecation", "-Xlint:unused")
 
 lazy val macros = (project in file("macros")).settings(
