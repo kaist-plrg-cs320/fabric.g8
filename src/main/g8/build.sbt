@@ -1,3 +1,5 @@
+ThisBuild / exportJars := false
+
 scalaVersion := "2.13.18"
 scalacOptions ++= Seq("-feature", "-deprecation", "-Xlint:unused")
 
